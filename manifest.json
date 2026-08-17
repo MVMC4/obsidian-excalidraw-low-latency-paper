@@ -1,0 +1,10 @@
+{
+  "id": "excalidraw-low-latency-paper",
+  "name": "Excalidraw Low Latency Paper",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.7",
+  "description": "Low-latency Excalidraw ink with dark, light, grid, ruled, and theme-following paper styles.",
+  "author": "Nido",
+  "authorUrl": "https://github.com/MVMC4",
+  "isDesktopOnly": false
+}

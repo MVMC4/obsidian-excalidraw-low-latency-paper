@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "paperStyle": "theme",
+  "gridSize": 24,
+  "gridColor": "#657184",
+  "ruledSpacing": 32,
+  "ruledColor": "#657184",
+  "darkBackground": "#111318",
+  "lightBackground": "#ffffff",
+  "smoothing": 0,
+  "streamline": 0,
+  "thinning": 0,
+  "linearEasing": true,
+  "removeTaper": true
+}
