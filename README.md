@@ -2,7 +2,7 @@
 
 An Obsidian companion plugin for Excalidraw that combines immediate-feeling ink with paper-style controls:
 
-- Follow Obsidian theme
+- Follow Obsidian theme, including Excalidraw's light/dark app theme
 - Dark paper
 - Light paper
 - Native Excalidraw grid

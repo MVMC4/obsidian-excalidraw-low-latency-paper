@@ -90,10 +90,11 @@ class ExcalidrawLowLatencyPaperPlugin extends Plugin {
 
   paperState() {
     const style = this.effectivePaperStyle();
-    const light = style === "light";
+    const light = style === "light" || ((style === "grid" || style === "ruled") && isLightTheme());
     const grid = style === "grid";
     return {
       viewBackgroundColor: light ? this.settings.lightBackground : this.settings.darkBackground,
+      theme: light ? "light" : "dark",
       gridModeEnabled: grid,
       gridSize: Math.max(8, Number(this.settings.gridSize) || 24),
       gridStep: Math.max(8, Number(this.settings.gridSize) || 24),
