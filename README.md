@@ -2,7 +2,7 @@
 
 An Obsidian companion plugin for Excalidraw that combines immediate-feeling ink with paper-style controls:
 
-- Follow Obsidian theme, including Excalidraw's light/dark app theme
+- Follow Excalidraw's own light/dark theme control without changing Excalidraw's UI theme
 - Dark paper
 - Light paper
 - Native Excalidraw grid
@@ -10,7 +10,7 @@ An Obsidian companion plugin for Excalidraw that combines immediate-feeling ink 
 - Configurable grid and ruled spacing
 - Low smoothing and streamline defaults
 
-The plugin updates Excalidraw app state and adds a pointer-transparent ruled-paper overlay. It does not modify drawing elements.
+The plugin updates only Excalidraw's paper/background settings and adds a pointer-transparent ruled-paper overlay. It never sets Excalidraw's `theme` app-state value, so it cannot change the surrounding Excalidraw UI theme. In Follow Excalidraw theme mode, the paper background follows Excalidraw's own light/dark control.
 
 ## Install
 

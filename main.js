@@ -32,6 +32,8 @@ class ExcalidrawLowLatencyPaperPlugin extends Plugin {
   async onload() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() || {});
     this.overlays = new Map();
+    this.viewThemeObservers = new Map();
+    this.viewChangeUnsubscribers = new Map();
     this.addSettingTab(new PaperSettingTab(this.app, this));
 
     this.addCommand({
@@ -62,7 +64,7 @@ class ExcalidrawLowLatencyPaperPlugin extends Plugin {
     });
 
     this.themeObserver = new MutationObserver(() => {
-      if (this.settings.paperStyle === "theme") this.applyAllViews(false);
+      if (["theme", "grid", "ruled"].includes(this.settings.paperStyle)) this.applyAllViews(false);
     });
     if (document.body) this.themeObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
   }
@@ -82,24 +84,61 @@ class ExcalidrawLowLatencyPaperPlugin extends Plugin {
     return this.getViews().find((view) => view === this.app.workspace.activeLeaf?.view);
   }
 
-  effectivePaperStyle() {
-    return this.settings.paperStyle === "theme"
-      ? (isLightTheme() ? "light" : "dark")
-      : this.settings.paperStyle;
+  effectivePaperStyle(view, appState) {
+    if (this.settings.paperStyle !== "theme") return this.settings.paperStyle;
+    const theme = appState?.theme === "light" || appState?.theme === "dark"
+      ? appState.theme
+      : (isLightTheme() ? "light" : "dark");
+    return theme;
   }
 
-  paperState() {
-    const style = this.effectivePaperStyle();
-    const light = style === "light" || ((style === "grid" || style === "ruled") && isLightTheme());
-    const grid = style === "grid";
+  paperState(view, currentState) {
+    const mode = this.settings.paperStyle;
+    const style = this.effectivePaperStyle(view, currentState);
+    const excalidrawTheme = currentState?.theme === "light" || currentState?.theme === "dark"
+      ? currentState.theme
+      : (isLightTheme() ? "light" : "dark");
+    const light = style === "light" || ((mode === "theme" || mode === "grid" || mode === "ruled") && excalidrawTheme === "light");
+    const grid = mode === "grid";
     return {
       viewBackgroundColor: light ? this.settings.lightBackground : this.settings.darkBackground,
-      theme: light ? "light" : "dark",
       gridModeEnabled: grid,
       gridSize: Math.max(8, Number(this.settings.gridSize) || 24),
       gridStep: Math.max(8, Number(this.settings.gridSize) || 24),
       gridColor: this.settings.gridColor,
     };
+  }
+
+  ensureViewObservers(view) {
+    const api = view?.excalidrawAPI;
+    if (!api) return;
+
+    if (!this.viewChangeUnsubscribers.has(view) && typeof api.onChange === "function") {
+      const unsubscribe = api.onChange(() => this.syncPaperOnly(view));
+      this.viewChangeUnsubscribers.set(view, typeof unsubscribe === "function" ? unsubscribe : null);
+    }
+
+    if (!this.viewThemeObservers.has(view) && view.contentEl) {
+      const root = view.contentEl.querySelector(".excalidraw") || view.contentEl;
+      const observer = new MutationObserver(() => {
+        if (["theme", "grid", "ruled"].includes(this.settings.paperStyle)) this.syncPaperOnly(view);
+      });
+      observer.observe(root, { attributes: true, attributeFilter: ["class", "data-theme"] });
+      this.viewThemeObservers.set(view, observer);
+    }
+  }
+
+  syncPaperOnly(view) {
+    const api = view?.excalidrawAPI;
+    if (!api || typeof api.getAppState !== "function" || typeof api.updateScene !== "function" || !this.settings.enabled) return false;
+    const current = api.getAppState();
+    const desired = this.paperState(view, current);
+    this.updatePaperOverlay(view, current);
+
+    const keys = ["viewBackgroundColor", "gridModeEnabled", "gridSize", "gridStep", "gridColor"];
+    const changed = keys.some((key) => current?.[key] !== desired[key]);
+    if (changed) api.updateScene({ appState: desired, commitToHistory: false });
+    return true;
   }
 
   lowLatencyOptions(current) {
@@ -136,8 +175,10 @@ class ExcalidrawLowLatencyPaperPlugin extends Plugin {
     return overlay;
   }
 
-  updatePaperOverlay(view) {
-    const style = this.effectivePaperStyle();
+  updatePaperOverlay(view, appState) {
+    const style = this.settings.paperStyle === "theme"
+      ? "theme"
+      : this.effectivePaperStyle(view, appState);
     const overlay = this.ensureRuledOverlay(view);
     if (!overlay) return;
     if (style === "ruled") {
@@ -156,11 +197,13 @@ class ExcalidrawLowLatencyPaperPlugin extends Plugin {
     const api = view?.excalidrawAPI;
     if (!api || typeof api.getAppState !== "function" || typeof api.updateScene !== "function") return false;
     if (!this.settings.enabled) return false;
-    const current = api.getAppState()?.currentStrokeOptions;
-    const appState = this.paperState();
+    this.ensureViewObservers(view);
+    const currentState = api.getAppState();
+    const current = currentState?.currentStrokeOptions;
+    const appState = this.paperState(view, currentState);
     if (current) appState.currentStrokeOptions = this.lowLatencyOptions(current);
     api.updateScene({ appState, commitToHistory: false });
-    this.updatePaperOverlay(view);
+    this.updatePaperOverlay(view, currentState);
     return true;
   }
 
@@ -197,6 +240,10 @@ class ExcalidrawLowLatencyPaperPlugin extends Plugin {
 
   onunload() {
     this.themeObserver?.disconnect();
+    for (const observer of this.viewThemeObservers.values()) observer.disconnect();
+    for (const unsubscribe of this.viewChangeUnsubscribers.values()) unsubscribe?.();
+    this.viewThemeObservers.clear();
+    this.viewChangeUnsubscribers.clear();
     for (const overlay of this.overlays.values()) overlay.remove();
     this.overlays.clear();
   }
@@ -224,9 +271,9 @@ class PaperSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Paper style")
-      .setDesc("Theme follows Obsidian light/dark mode; Ruled adds horizontal writing lines.")
+      .setDesc("Follow theme uses Excalidraw's own light/dark control; this plugin changes only the paper background.")
       .addDropdown((dropdown) => dropdown
-        .addOptions({ theme: "Follow Obsidian theme", dark: "Dark", light: "Light", grid: "Grid", ruled: "Ruled" })
+        .addOptions({ theme: "Follow Excalidraw theme", dark: "Dark paper", light: "Light paper", grid: "Grid paper", ruled: "Ruled paper" })
         .setValue(this.plugin.settings.paperStyle)
         .onChange(async (value) => {
           this.plugin.settings.paperStyle = value;
